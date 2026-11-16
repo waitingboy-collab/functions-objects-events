@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Geo Area</title>
+  <meta name="description" content="calculateGeoArea – площ на сферичен многоъгълник върху интерактивна карта.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    /* ================= Дизайн токени ================= */
+    :root {
+      --paper: #F6F5F1;
+      --surface: #FFFFFF;
+      --ink: #111216;
+      --ink-2: #3B3E46;
+      --muted: #80848D;
+      --line: #E5E3DD;
+      --line-soft: #EFEDE8;
+      --accent: #2D4BFF;
+      --accent-ink: #1B33D6;
+      --accent-soft: #EEF1FF;
+      --violet: #6D3FD9;
+      --violet-soft: #F2EEFD;
+      --green: #0B9F6E;
+      --radius: 20px;
+      --shadow: 0 1px 0 rgba(17,18,22,.03), 0 1px 3px rgba(17,18,22,.04), 0 28px 56px -28px rgba(17,18,22,.20);
+      --serif: "Instrument Serif", Georgia, serif;
+      --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+    body::before {
+      content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background-image: radial-gradient(rgba(17,18,22,.08) 1px, transparent 1.3px);
+      background-size: 24px 24px;
+      -webkit-mask-image: linear-gradient(to bottom, #000, transparent 560px);
+      mask-image: linear-gradient(to bottom, #000, transparent 560px);
+    }
+    body::after {
+      content: ""; position: fixed; top: -260px; right: -220px; width: 760px; height: 760px; z-index: -1; pointer-events: none;
+      background: radial-gradient(circle, rgba(109,63,217,.10), transparent 62%);
+    }
+    code { font-family: var(--mono); font-size: .88em; background: var(--line-soft); padding: 1px 6px; border-radius: 6px; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .shell { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+    @media (max-width: 640px) { .shell { padding: 0 16px; } }
+
+    /* ================= Горна лента ================= */
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 0; }
+    .brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; min-width: 0; }
+    .mark { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; background: var(--ink); color: #fff; font: italic 24px/1 var(--serif); box-shadow: inset 0 -2px 0 rgba(255,255,255,.12), 0 8px 18px -8px rgba(17,18,22,.6); }
+    .brand b { display: block; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+    .brand small { display: block; font-size: 12px; color: var(--muted); }
+    .tabs { display: flex; gap: 2px; padding: 4px; max-width: 100%; overflow-x: auto; scrollbar-width: none; background: rgba(255,255,255,.72); border: 1px solid var(--line); border-radius: 999px; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; color: var(--ink-2); font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; transition: background .2s, color .2s; }
+    .tab .num { font: 500 11px var(--mono); color: var(--muted); }
+    .tab:hover { background: var(--line-soft); }
+    .tab.active { background: var(--ink); color: #fff; }
+    .tab.active .num { color: rgba(255,255,255,.5); }
+    @media (max-width: 880px) { .topbar { flex-direction: column; align-items: flex-start; } }
+
+    /* ================= Hero ================= */
+    .hero { padding: 52px 0 40px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 22px; font: 500 12px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+    .eyebrow i { width: 8px; height: 8px; border-radius: 50%; background: var(--violet); box-shadow: 0 0 0 4px var(--violet-soft); }
+    .display { margin: 0 0 22px; font: 400 clamp(56px, 9vw, 112px)/.9 var(--serif); letter-spacing: -.03em; }
+    .display em { color: var(--violet); }
+    .lede { max-width: 660px; margin: 0 0 26px; font-size: 18px; line-height: 1.6; color: var(--ink-2); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font: 12px var(--mono); color: var(--ink-2); }
+
+    /* ================= Карти и бутони ================= */
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px 20px; border-bottom: 1px solid var(--line-soft); }
+    .card-title { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+    .idx { font: 500 11px var(--mono); color: var(--muted); padding: 2px 7px; border: 1px solid var(--line); border-radius: 6px; }
+    .sig { font: 12px var(--mono); color: var(--muted); }
+    .card-body { padding: 20px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: 500 14px/1 var(--sans); cursor: pointer; transition: transform .15s, background .2s, border-color .2s; }
+    .btn:hover { background: #FBFAF8; border-color: #D3D0C8; }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--ink); border-color: var(--ink); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 10px 22px -10px rgba(17,18,22,.6); }
+    .btn-primary:hover { background: #262830; border-color: #262830; }
+    .btn-sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
+    .btn-block { width: 100%; height: 46px; font-size: 15px; }
+    .btn:disabled { opacity: .45; cursor: default; transform: none; }
+
+    /* ================= Работна площ ================= */
+    .workbench { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 20px; align-items: start; }
+    @media (max-width: 1000px) { .workbench { grid-template-columns: minmax(0, 1fr); } }
+    .stack { display: grid; gap: 20px; min-width: 0; }
+
+    /* Превключвател на слоеве */
+    .segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--line-soft); }
+    .segmented button { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); font: 500 12.5px var(--sans); cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
+    .segmented button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(17,18,22,.08), 0 0 0 1px rgba(17,18,22,.04); }
+
+    .map-wrap { position: relative; padding: 16px; }
+    #map { height: clamp(440px, 66vh, 700px); border-radius: 12px; border: 1px solid var(--line-soft); background: #EDEBE6; cursor: crosshair; }
+    .map-hint {
+      position: absolute; left: 50%; top: 32px; z-index: 500; transform: translateX(-50%);
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 8px 14px 8px 10px;
+      border-radius: 999px;
+      background: rgba(17,18,22,.88); color: #fff;
+      font-size: 13px; font-weight: 500; white-space: nowrap;
+      box-shadow: 0 12px 24px -12px rgba(17,18,22,.6);
+      pointer-events: none;
+      transition: opacity .25s, transform .25s;
+    }
+    .map-hint i { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: grid; place-items: center; background: var(--accent); font: 600 11px var(--mono); font-style: normal; }
+    .map-hint.hidden { opacity: 0; transform: translate(-50%, -6px); }
+    .map-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 0 20px 18px; font-size: 13px; color: var(--muted); }
+    .map-foot b { color: var(--ink-2); font-weight: 500; }
+
+    /* Leaflet – по-изчистени контроли */
+    .leaflet-container { font-family: var(--sans); }
+    .tiles-mono { filter: grayscale(1) brightness(1.06) contrast(.88); }
+    .leaflet-bar { border: 0 !important; border-radius: 12px !important; overflow: hidden; box-shadow: 0 1px 2px rgba(17,18,22,.08), 0 10px 24px -10px rgba(17,18,22,.35) !important; }
+    .leaflet-bar a { width: 34px !important; height: 34px !important; line-height: 34px !important; color: var(--ink) !important; border-bottom-color: var(--line-soft) !important; }
+    .leaflet-control-attribution { font-size: 10px; background: rgba(255,255,255,.8) !important; border-top-left-radius: 8px; }
+    .vertex { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font: 600 11px var(--mono); border: 2.5px solid #fff; box-shadow: 0 0 0 1px rgba(17,18,22,.08), 0 6px 14px -4px rgba(27,51,214,.6); cursor: grab; transition: transform .15s; }
+    .vertex:hover { transform: scale(1.12); }
+    .leaflet-dragging .vertex { cursor: grabbing; }
+
+    /* Резултат */
+    .metric-label { font: 500 12px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .metric { display: flex; align-items: baseline; gap: 10px; font: 400 68px/1 var(--serif); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .metric small { font: 400 28px var(--serif); color: var(--muted); }
+    .metric.empty { color: #CFCCC4; }
+    .metric-sub { margin-top: 10px; font-size: 14px; color: var(--muted); min-height: 22px; }
+    .kpis { display: grid; grid-template-columns: repeat(3, 1fr); margin: 20px 0 16px; border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden; }
+    .kpi { padding: 12px 14px; border-right: 1px solid var(--line-soft); min-width: 0; }
+    .kpi:last-child { border-right: 0; }
+    .kpi small { display: block; font-size: 12px; color: var(--muted); }
+    .kpi b { font: 500 17px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .console { margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: #FAF9F6; border: 1px solid var(--line-soft); font: 13px/1.6 var(--mono); color: var(--ink); overflow-x: auto; }
+    .console .prompt { color: var(--muted); }
+    .warn { color: #B45309; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .actions .btn { flex: 1; }
+    .pop { animation: pop .45s cubic-bezier(.2,.7,.2,1); }
+    @keyframes pop { from { opacity: .3; transform: translateY(4px); } }
+
+    /* Списък с върхове */
+    .vlist { max-height: 268px; overflow-y: auto; margin: -4px -6px; padding: 4px 6px; }
+    .vrow { display: grid; grid-template-columns: 28px 1fr 30px; gap: 10px; align-items: center; padding: 7px 6px; margin: 0 -6px; border-radius: 10px; }
+    .vrow:hover { background: #FAF9F6; }
+    .vbadge { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; font: 600 10.5px var(--mono); }
+    .vcoord { font: 12.5px var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vcoord span { color: var(--muted); }
+    .x { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; }
+    .x:hover { background: var(--line-soft); color: var(--ink); }
+    .empty-note { padding: 14px; border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; color: var(--muted); text-align: center; }
+
+    /* Формула */
+    .section { margin-top: 20px; }
+    .formula-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+    @media (max-width: 900px) { .formula-grid { grid-template-columns: minmax(0, 1fr); } }
+    .formula-main { padding: 34px 28px; border-right: 1px solid var(--line-soft); overflow-x: auto; }
+    @media (max-width: 900px) { .formula-main { border-right: 0; border-bottom: 1px solid var(--line-soft); } }
+    .math { font: italic 400 clamp(22px, 2.6vw, 32px)/1.4 var(--serif), Georgia, serif; white-space: nowrap; color: var(--ink); }
+    .math .op { font-style: normal; color: var(--muted); padding: 0 .12em; }
+    .math .big { font-style: normal; font-size: 1.35em; vertical-align: -.08em; color: var(--violet); }
+    .math sub { font-size: .55em; }
+    .formula-note { margin: 14px 0 0; font-size: 14px; color: var(--muted); max-width: 520px; }
+    .legend-list { margin: 0; padding: 26px 28px; display: grid; gap: 14px; }
+    .legend-list div { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: baseline; }
+    .legend-list dt { font: italic 22px var(--serif), Georgia, serif; color: var(--violet); }
+    .legend-list dd { margin: 0; font-size: 14px; color: var(--ink-2); }
+
+    /* Изходен код */
+    .source { margin: 0; padding: 18px 0; overflow-x: auto; font: 13.5px/1.75 var(--mono); counter-reset: ln; }
+    .source .line { display: block; padding: 0 20px 0 0; white-space: pre; }
+    .source .line::before { counter-increment: ln; content: counter(ln); display: inline-block; width: 44px; padding-right: 18px; text-align: right; color: #C4C1B9; user-select: none; }
+    .tok-k { color: #6D3FD9; } .tok-s { color: #0B7A55; } .tok-c { color: var(--muted); font-style: italic; } .tok-n { color: #C2410C; }
+
+    .footer { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 72px; padding: 28px 0 44px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+    .footer b { color: var(--ink-2); font-weight: 500; }
+
+    .reveal { animation: rise .8s cubic-bezier(.2,.7,.2,1) both; }
+    .d1 { animation-delay: .06s; } .d2 { animation-delay: .12s; } .d3 { animation-delay: .18s; } .d4 { animation-delay: .24s; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="https://html-snippet-six.vercel.app">
+        <span class="mark">ƒ</span>
+        <span><b>Functions, Objects &amp; Events</b><small>Fundamentals of Programming with AI</small></span>
+      </a>
+      <nav class="tabs" aria-label="Упражнения">
+        <a class="tab" href="https://html-snippet-six.vercel.app"><span class="num">01</span>HTML Snippet</a>
+        <a class="tab" href="https://nearest-point.vercel.app"><span class="num">02</span>Nearest Point</a>
+        <a class="tab active" href="https://geo-area.vercel.app" aria-current="page"><span class="num">03</span>Geo Area</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow reveal"><i></i>Упражнение 03 · Rest параметри и обекти</p>
+      <h1 class="display reveal d1">Geo <em>Area</em></h1>
+      <p class="lede reveal d2">Очертайте парцел директно върху картата. <code>calculateGeoArea</code> приема върховете като обекти <code>{ latitude, longitude }</code> и изчислява площта на сферичния многоъгълник при радиус на Земята 6&nbsp;371&nbsp;km.</p>
+      <div class="chips reveal d3">
+        <span class="chip">...coordinates</span>
+        <span class="chip">{ latitude, longitude }</span>
+        <span class="chip">Math.sin · Math.PI</span>
+        <span class="chip">Leaflet · OpenStreetMap</span>
+      </div>
+    </section>
+
+    <section class="workbench">
+      <div class="card reveal d3">
+        <div class="card-head">
+          <h2 class="card-title"><span class="idx">01</span>Карта</h2>
+          <div class="segmented" role="group" aria-label="Слой на картата">
+            <button data-layer="light" class="active">Светла</button>
+            <button data-layer="osm">OSM</button>
+            <button data-layer="sat">Сателит</button>
+          </div>
+        </div>
+        <div class="map-wrap">
+          <div id="map" aria-label="Интерактивна карта"></div>
+          <div class="map-hint" id="hint"><i id="hintCount">0</i><span id="hintText">Кликнете върху картата, за да добавите връх</span></div>
+        </div>
+        <div class="map-foot">
+          <span>Клик добавя връх · върховете се <b>влачат</b></span>
+          <span id="cursorReadout">—</span>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="card reveal d4">
+          <div class="card-head">
+            <h2 class="card-title"><span class="idx">02</span>Резултат</h2>
+            <span class="sig">calculateGeoArea(...coords)</span>
+          </div>
+          <div class="card-body">
+            <div class="metric-label">Площ</div>
+            <div class="metric empty" id="metric">—</div>
+            <div class="metric-sub" id="metricSub">Добавете поне 3 върха и натиснете „Изчисли площ“.</div>
+            <div class="kpis">
+              <div class="kpi"><small>Върхове</small><b id="kpiCount">0</b></div>
+              <div class="kpi"><small>Периметър</small><b id="kpiPerimeter">—</b></div>
+              <div class="kpi"><small>Декари</small><b id="kpiDecares">—</b></div>
+            </div>
+            <pre class="console" id="console"><span class="prompt">› </span>—</pre>
+            <button class="btn btn-primary btn-block" id="calcBtn">Изчисли площ</button>
+            <div class="actions">
+              <button class="btn btn-sm" id="exampleBtn">Пример</button>
+              <button class="btn btn-sm" id="undoBtn">Отмени</button>
+              <button class="btn btn-sm" id="clearBtn">Изчисти</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card reveal d4">
+          <div class="card-head">
+            <h2 class="card-title"><span class="idx">03</span>Върхове</h2>
+            <span class="sig">latitude, longitude</span>
+          </div>
+          <div class="card-body">
+            <div class="vlist" id="pointList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card section reveal">
+      <div class="card-head">
+        <h2 class="card-title"><span class="idx">04</span>Формулата</h2>
+        <span class="sig">площ на сферичен многоъгълник</span>
+      </div>
+      <div class="formula-grid">
+        <div class="formula-main">
+          <div class="math">
+            A <span class="op">=</span> <span class="op">|</span><span class="big">Σ</span>
+            (λ<sub>i+1</sub> <span class="op">−</span> λ<sub>i</sub>)(2 <span class="op">+</span> sin φ<sub>i</sub> <span class="op">+</span> sin φ<sub>i+1</sub>)<span class="op">|</span>
+            <span class="op">·</span> R² <span class="op">/</span> 2
+          </div>
+          <p class="formula-note">Сумата обхожда всички ръбове на многоъгълника, включително последния, който се връща към първия връх. Абсолютната стойност прави резултата независим от посоката на обхождане.</p>
+        </div>
+        <dl class="legend-list">
+          <div><dt>φ</dt><dd>географска ширина (latitude) в радиани</dd></div>
+          <div><dt>λ</dt><dd>географска дължина (longitude) в радиани</dd></div>
+          <div><dt>R</dt><dd>радиус на Земята: 6&nbsp;371&nbsp;000&nbsp;m</dd></div>
+          <div><dt>A</dt><dd>площ в m², закръглена до 2 знака</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="card section reveal">
+      <div class="card-head">
+        <h2 class="card-title"><span class="idx">05</span>Под капака</h2>
+        <button type="button" class="btn btn-sm" id="copySource">Копирай за Judge</button>
+      </div>
+      <pre class="source" id="source"></pre>
+    </section>
+
+    <footer class="footer">
+      <span><b>Functions, Objects &amp; Events</b> · Fundamentals of Programming with AI</span>
+      <span>Leaflet · данни © OpenStreetMap</span>
+    </footer>
+  </div>
+
+  <script>
+    // ================= Функцията от задачата =================
+    function calculateGeoArea(...coordinates) {
+      const R = 6371000; // радиус на Земята в метри
+
+      // Вътрешна функция: градуси → радиани
+      const toRadians = (degrees) => (degrees * Math.PI) / 180;
+
+      let sum = 0;
+
+      for (let i = 0; i < coordinates.length; i++) {
+        const p1 = coordinates[i];
+        // % връща индекс 0 след последния → затваряме многоъгълника
+        const p2 = coordinates[(i + 1) % coordinates.length];
+
+        const lat1 = toRadians(p1.latitude);
+        const lat2 = toRadians(p2.latitude);
+        const deltaLon = toRadians(p2.longitude - p1.longitude);
+
+        sum += deltaLon * (2 + Math.sin(lat1) + Math.sin(lat2));
+      }
+
+      const area = (Math.abs(sum) * R * R) / 2;
+
+      return `Area: ${area.toFixed(2)} m²`;
+    }
+
+    // ================= Помощни =================
+    const $ = (id) => document.getElementById(id);
+    const escapeHTML = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    function highlightJS(code) {
+      return escapeHTML(code).replace(
+        /(\/\/[^\n]*)|(`(?:[^`\\]|\\.)*`|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|\b(function|return|const|let|for|of|if|else|break)\b|\b(\d+(?:\.\d+)?n?)\b/g,
+        (m, c, s, k, n) => c ? `<span class="tok-c">${c}</span>` : s ? `<span class="tok-s">${s}</span>` : k ? `<span class="tok-k">${k}</span>` : `<span class="tok-n">${n}</span>`
+      );
+    }
+    function dedent(src) {
+      const lines = src.split("\n");
+      const base = lines[lines.length - 1].match(/^\s*/)[0].length;
+      return lines.map((l, i) => (i === 0 ? l : l.slice(base))).join("\n");
+    }
+    function copyText(text, button) {
+      const original = button.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        button.textContent = "Копирано ✓";
+        setTimeout(() => (button.textContent = original), 1400);
+      });
+    }
+    // 1384.1 → "1 384.10" (тънък интервал между хилядите)
+    const group = (n, digits = 2) => {
+      const [int, dec] = n.toFixed(digits).split(".");
+      return int.replace(/\B(?=(\d{3})+(?!\d))/g, " ") + (dec ? "." + dec : "");
+    };
+
+    // Периметър по формулата на Хаверсин (за допълнителна информация)
+    function perimeter(coords) {
+      const R = 6371000, rad = (d) => (d * Math.PI) / 180;
+      let total = 0;
+      coords.forEach((a, i) => {
+        const b = coords[(i + 1) % coords.length];
+        const dLat = rad(b.latitude - a.latitude), dLon = rad(b.longitude - a.longitude);
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLon / 2) ** 2;
+        total += 2 * R * Math.asin(Math.sqrt(h));
+      });
+      return total;
+    }
+
+    // ================= Карта =================
+    const map = L.map("map", { zoomControl: true, maxZoom: 20 }).setView([42.63625, 23.36967], 18);
+
+    const layers = {
+      // Светла: същите OpenStreetMap плочки, направени монохромни с CSS филтър
+      light: L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxNativeZoom: 19, maxZoom: 20, className: "tiles-mono",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }),
+      osm: L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxNativeZoom: 19, maxZoom: 20,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }),
+      sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxNativeZoom: 19, maxZoom: 20,
+        attribution: "Tiles &copy; Esri — Esri, Maxar, Earthstar Geographics",
+      }),
+    };
+    let activeLayer = layers.light.addTo(map);
+
+    document.querySelectorAll(".segmented button").forEach((button) => {
+      button.addEventListener("click", () => {
+        map.removeLayer(activeLayer);
+        activeLayer = layers[button.dataset.layer].addTo(map);
+        document.querySelectorAll(".segmented button").forEach((b) => b.classList.toggle("active", b === button));
+      });
+    });
+
+    // ================= Състояние =================
+    let coordinates = [];   // [{ latitude, longitude }, ...]
+    let computed = false;   // след първото изчисление площта се обновява на живо
+    const markersLayer = L.layerGroup().addTo(map);
+    let shape = null;
+
+    const makeIcon = (n) => L.divIcon({ className: "", html: `<div class="vertex">${n}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] });
+
+    function drawShape() {
+      if (shape) { map.removeLayer(shape); shape = null; }
+      const latLngs = coordinates.map((c) => [c.latitude, c.longitude]);
+      if (latLngs.length >= 3) {
+        shape = L.polygon(latLngs, { color: "#2D4BFF", weight: 2.5, fillColor: "#2D4BFF", fillOpacity: .14, lineJoin: "round" }).addTo(map);
+      } else if (latLngs.length === 2) {
+        shape = L.polyline(latLngs, { color: "#2D4BFF", weight: 2.5, dashArray: "6 6" }).addTo(map);
+      }
+      if (shape) shape.bringToBack();
+    }
+
+    function drawMarkers() {
+      markersLayer.clearLayers();
+      coordinates.forEach((c, index) => {
+        const marker = L.marker([c.latitude, c.longitude], { icon: makeIcon(index + 1), draggable: true, autoPan: true });
+        // Събитие drag: върхът се мести, полигонът и площта се обновяват на живо
+        marker.on("drag", (e) => {
+          const { lat, lng } = e.target.getLatLng();
+          coordinates[index] = { latitude: lat, longitude: lng };
+          drawShape();
+          showResult();
+        });
+        marker.on("dragend", renderList);
+        marker.addTo(markersLayer);
+      });
+    }
+
+    function renderList() {
+      const list = $("pointList");
+      if (coordinates.length === 0) {
+        list.innerHTML = '<div class="empty-note">Още няма върхове. Кликнете върху картата.</div>';
+        return;
+      }
+      list.innerHTML = "";
+      coordinates.forEach((c, index) => {
+        const row = document.createElement("div");
+        row.className = "vrow";
+        row.innerHTML =
+          `<span class="vbadge">${index + 1}</span>` +
+          `<span class="vcoord">${c.latitude.toFixed(6)}<span>, </span>${c.longitude.toFixed(6)}</span>`;
+        const remove = document.createElement("button");
+        remove.className = "x";
+        remove.textContent = "×";
+        remove.title = "Премахни върха";
+        remove.addEventListener("click", () => { coordinates.splice(index, 1); update(); });
+        row.append(remove);
+        list.append(row);
+      });
+    }
+
+    function showResult() {
+      const n = coordinates.length;
+      const metric = $("metric");
+      $("kpiCount").textContent = n;
+
+      if (!computed) return;
+
+      if (n < 3) {
+        metric.innerHTML = "—";
+        metric.classList.add("empty");
+        $("metricSub").innerHTML = '<span class="warn">Нужни са поне 3 върха, за да има площ.</span>';
+        $("kpiPerimeter").textContent = "—";
+        $("kpiDecares").textContent = "—";
+        $("console").innerHTML = '<span class="prompt">› </span>—';
+        return;
+      }
+
+      const text = calculateGeoArea(...coordinates);          // spread: масив → отделни аргументи
+      const squareMeters = parseFloat(text.replace("Area: ", ""));
+
+      metric.innerHTML = `${group(squareMeters)}<small>m²</small>`;
+      metric.classList.remove("empty");
+      $("metricSub").textContent = `≈ ${group(squareMeters / 10000, 4)} ха · ${n} върха`;
+      $("kpiPerimeter").textContent = `${group(perimeter(coordinates), 1)} m`;
+      $("kpiDecares").textContent = group(squareMeters / 1000, 2);
+      $("console").innerHTML = `<span class="prompt">› </span>${escapeHTML(text)}`;
+    }
+
+    function updateHint() {
+      const n = coordinates.length;
+      $("hintCount").textContent = n;
+      $("hintText").textContent =
+        n === 0 ? "Кликнете върху картата, за да добавите връх" :
+        n < 3 ? `Още ${3 - n} ${3 - n === 1 ? "връх" : "върха"} до многоъгълник` : "";
+      $("hint").classList.toggle("hidden", n >= 3);
+      $("undoBtn").disabled = n === 0;
+      $("clearBtn").disabled = n === 0;
+    }
+
+    function update() {
+      drawShape();
+      drawMarkers();
+      renderList();
+      showResult();
+      updateHint();
+    }
+
+    // ================= Събития =================
+    // Клик върху картата → нов връх
+    map.on("click", (event) => {
+      coordinates.push({ latitude: event.latlng.lat, longitude: event.latlng.lng });
+      update();
+    });
+
+    map.on("mousemove", (event) => {
+      $("cursorReadout").textContent = `${event.latlng.lat.toFixed(6)}, ${event.latlng.lng.toFixed(6)}`;
+    });
+
+    $("calcBtn").addEventListener("click", () => {
+      computed = true;
+      showResult();
+      const metric = $("metric");
+      metric.classList.remove("pop"); void metric.offsetWidth; metric.classList.add("pop");
+    });
+
+    $("undoBtn").addEventListener("click", () => {
+      coordinates.pop();
+      update();
+    });
+
+    $("clearBtn").addEventListener("click", () => {
+      coordinates = [];
+      computed = false;
+      $("metric").innerHTML = "—";
+      $("metric").classList.add("empty");
+      $("metricSub").textContent = "Добавете поне 3 върха и натиснете „Изчисли площ“.";
+      $("kpiPerimeter").textContent = "—";
+      $("kpiDecares").textContent = "—";
+      $("console").innerHTML = '<span class="prompt">› </span>—';
+      update();
+    });
+
+    $("exampleBtn").addEventListener("click", () => {
+      coordinates = [
+        { latitude: 42.635912, longitude: 23.369442 },
+        { latitude: 42.635917, longitude: 23.369905 },
+        { latitude: 42.636574, longitude: 23.369877 },
+      ];
+      update();
+      map.fitBounds(coordinates.map((c) => [c.latitude, c.longitude]), { padding: [70, 70] });
+      $("calcBtn").click();
+    });
+
+    // Изходен код
+    const sourceCode = dedent(calculateGeoArea.toString());
+    $("source").innerHTML = highlightJS(sourceCode).split("\n").map((l) => `<span class="line">${l || " "}</span>`).join("");
+    $("copySource").addEventListener("click", (e) => copyText(sourceCode, e.currentTarget));
+
+    update();
+    // ?example в адреса зарежда примера от условието
+    if (new URLSearchParams(window.location.search).has("example")) $("exampleBtn").click();
+  </script>
+</body>
+</html>
